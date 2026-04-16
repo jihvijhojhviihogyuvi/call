@@ -29,6 +29,11 @@
       "u": "chars",
       "t": "@char hi",
       "time": "7:32:27 PM"
+    },
+    {
+      "u": "char",
+      "t": "@chars hi",
+      "time": "7:32:44 PM"
     }
   ],
   "test_logs": [
