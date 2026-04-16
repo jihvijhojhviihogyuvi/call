@@ -7,33 +7,27 @@
   <style>
     :root { --primary: #007bff; --bg: #0d1117; --panel: #161b22; --text: #c9d1d9; --border: #30363d; }
     body { font-family: -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; display: flex; height: 100vh; }
-    
     /* Login */
     #auth-overlay { position: fixed; inset: 0; background: var(--bg); z-index: 100; display: flex; align-items: center; justify-content: center; }
     .auth-box { background: var(--panel); padding: 30px; border-radius: 8px; border: 1px solid var(--border); width: 320px; text-align: center; }
-    
     /* Layout */
     .sidebar { width: 300px; background: var(--panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
     .main { flex: 1; display: flex; flex-direction: column; padding: 20px; position: relative; }
-    
     /* Call History & List */
     .history-item { padding: 12px; border-bottom: 1px solid var(--border); cursor: pointer; font-size: 14px; display: flex; justify-content: space-between; }
     .history-item:hover { background: #21262d; }
     .status-dot { width: 10px; height: 10px; border-radius: 50%; background: #6e7681; align-self: center; }
     .status-dot.online { background: #238636; box-shadow: 0 0 5px #238636; }
-
     /* Video Grid */
     #video-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px; flex: 1; overflow-y: auto; }
     .video-container { position: relative; background: #000; height: 280px; border-radius: 8px; border: 1px solid var(--border); overflow: hidden; }
     video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
     .name-tag { position: absolute; bottom: 10px; left: 10px; background: rgba(0,0,0,0.7); padding: 4px 10px; border-radius: 4px; font-size: 12px; z-index: 5; }
-
     /* Controls */
     input { width: 100%; padding: 10px; margin: 8px 0; border-radius: 6px; border: 1px solid var(--border); background: #0d1117; color: white; box-sizing: border-box; }
     .btn { background: #238636; color: white; border: none; padding: 10px; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; transition: 0.2s; }
     .btn:hover { background: #2ea043; }
     .btn-call { width: 100px; background: var(--primary); }
-
     #chat-area { height: 180px; background: #0d1117; border: 1px solid var(--border); border-radius: 6px; overflow-y: auto; padding: 10px; margin-top: 15px; font-size: 14px; }
     .msg { margin-bottom: 5px; }
     .msg b { color: var(--primary); }
@@ -182,6 +176,12 @@ async function startApp() {
 }
 
 function handleDataConn(conn) {
+    // FIXED: Add null/undefined check to prevent TypeError
+    if (!conn) {
+        console.error("Connection object is null or undefined");
+        return;
+    }
+
     conn.on('open', () => {
         activeConns[conn.peer] = conn;
         updateUserList();
@@ -193,15 +193,41 @@ function handleDataConn(conn) {
         });
     });
     conn.on('close', () => { delete activeConns[conn.peer]; updateUserList(); });
+    
+    // FIXED: Add error handler for connection failures
+    conn.on('error', err => {
+        console.error("Connection error:", err);
+        if (conn.peer) delete activeConns[conn.peer];
+    });
 }
 
 function startCall(id) {
     const tid = id || document.getElementById('target-id').value;
     if(!tid || tid === currentUser.id || activeConns[tid]) return;
 
+    // FIXED: Check if peer is initialized before attempting connection
+    if (!peer) {
+        console.error("Peer connection not initialized");
+        alert("Connection not ready. Please wait or refresh.");
+        return;
+    }
+
+    // FIXED: Validate connection creation
     const conn = peer.connect(tid);
+    if (!conn) {
+        console.error("Failed to create peer connection to " + tid);
+        alert("Failed to connect to user. Please try again.");
+        return;
+    }
+
     handleDataConn(conn);
-    peer.call(tid, localStream).on('stream', s => renderVideo(s, "Partner", tid));
+    
+    // FIXED: Add error handling for call stream
+    const call = peer.call(tid, localStream);
+    if (call) {
+        call.on('stream', s => renderVideo(s, "Partner", tid));
+        call.on('error', err => console.error("Call error:", err));
+    }
 }
 
 function saveChatToCloud(u, t) {
