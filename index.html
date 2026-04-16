@@ -3,39 +3,25 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pro Group P2P Call with Private Chat</title>
+  <title>Pro Group P2P Call</title>
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <style>
     body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:#111; color:#eee; margin:0; display: flex; height: 100vh; overflow: hidden; }
-    
-    /* Main Layout */
     .main-container { flex: 1; display: flex; flex-direction: column; padding: 15px; }
     #video-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 15px; flex-grow: 1; overflow-y: auto; align-content: start; }
-    
-    /* Video Container */
     .video-container { position: relative; background: #000; border-radius: 12px; overflow: hidden; border: 2px solid #333; height: 300px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
     video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); display: block; }
-    
-    /* UI Overlays */
     .name-tag { position: absolute; bottom: 15px; left: 15px; background: rgba(0,0,0,0.8); padding: 5px 12px; border-radius: 6px; font-size: 14px; font-weight: bold; color: #fff; z-index: 20; border: 1px solid rgba(255,255,255,0.2); }
     .video-controls { position: absolute; top: 10px; right: 10px; z-index: 20; display: flex; gap: 5px; }
-    
-    .icon-btn { background: rgba(0,0,0,0.6); border: 1px solid #444; color: white; padding: 8px; border-radius: 50%; cursor: pointer; width: 35px; height: 35px; display: flex; align-items: center; justify-content: center; font-size: 18px; transition: 0.2s; }
+    .icon-btn { background: rgba(0,0,0,0.6); border: 1px solid #444; color: white; padding: 8px; border-radius: 50%; cursor: pointer; width: 35px; height: 35px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
     .icon-btn.off { background: #dc3545; border-color: #dc3545; }
-    
-    /* Sidebar Chat */
     .sidebar { width: 320px; background: #1a1a1a; border-left: 1px solid #333; display: flex; flex-direction: column; }
     #chat-box { flex: 1; padding: 15px; overflow-y: auto; scroll-behavior: smooth; }
     .msg { margin-bottom: 12px; padding: 10px; border-radius: 8px; background: #2a2a2a; border-left: 4px solid #007bff; font-size: 14px; }
     .msg b { color: #00d4ff; display: block; margin-bottom: 2px; }
-    
-    /* Private Message Style */
     .msg.private { border-left-color: #ff00ff; background: #2d1a2d; }
     .msg.private b { color: #ff00ff; }
-
     .input-area { padding: 15px; background: #111; display: flex; gap: 8px; border-top: 1px solid #333; }
-    
-    /* Header Controls */
     .controls { background: #222; padding: 15px; border-radius: 12px; margin-bottom: 15px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; border: 1px solid #333; }
     input { padding: 10px; border-radius: 6px; border: 1px solid #444; background: #000; color: #fff; outline: none; flex: 1; min-width: 120px; }
     .btn-main { padding: 10px 20px; cursor: pointer; border-radius: 6px; border: none; background: #007bff; color: white; font-weight: bold; transition: 0.2s; }
@@ -73,19 +59,41 @@ let connections = {};
 
 initPeer();
 
+// SMART MEDIA START
 async function startMedia() {
+  let stream;
   try {
-    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-    addVideoStream(localStream, "You (Local)", true, "local-user");
-  } catch (err) {
+    // Attempt 1: Video + Audio
+    stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+  } catch (e) {
+    console.warn("Camera failed, trying Audio only...");
+    try {
+      // Attempt 2: Audio Only
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (e2) {
+      console.error("Microphone also failed.");
+    }
+  }
+
+  // Create local placeholder if video is missing
+  if (!stream || stream.getVideoTracks().length === 0) {
     const canvas = document.createElement('canvas');
     canvas.width = 640; canvas.height = 480;
     const ctx = canvas.getContext('2d');
     ctx.fillStyle = '#222'; ctx.fillRect(0,0,640,480);
-    ctx.fillStyle = '#666'; ctx.font = "30px Arial"; ctx.fillText("No Camera Found", 200, 240);
-    addVideoStream(canvas.captureStream(), "You (No Camera)", true, "local-user");
+    ctx.fillStyle = '#666'; ctx.font = "30px Arial"; ctx.textAlign = "center";
+    ctx.fillText("No Camera", 320, 240);
+    
+    const canvasStream = canvas.captureStream();
+    if (stream) stream.getAudioTracks().forEach(t => canvasStream.addTrack(t));
+    localStream = canvasStream;
+  } else {
+    localStream = stream;
   }
+
+  addVideoStream(localStream, "You (Local)", true, "local-user");
 }
+
 startMedia();
 
 function initPeer() {
@@ -128,14 +136,8 @@ function setupChatConnection(conn, isIncoming) {
         const tag = document.querySelector(`[data-id="${conn.peer}"] .name-tag`);
         if (tag) tag.innerText = data.name;
       }
-      
-      if (data.type === 'chat') {
-        appendMessage(connections[conn.peer].name, data.message, data.isPrivate);
-      }
-
-      if (data.type === 'mesh-intro') {
-        data.peerIds.forEach(id => connectToPeer(id));
-      }
+      if (data.type === 'chat') appendMessage(connections[conn.peer].name, data.message, data.isPrivate);
+      if (data.type === 'mesh-intro') data.peerIds.forEach(id => connectToPeer(id));
     });
 
     conn.on('close', () => {
@@ -145,55 +147,6 @@ function setupChatConnection(conn, isIncoming) {
   });
 }
 
-function sendMsg() {
-  const text = chatInput.value.trim();
-  if (!text) return;
-
-  let targetPeer = null;
-  let cleanText = text;
-  let isPrivate = false;
-
-  // Private message logic: check if it starts with @
-  if (text.startsWith('@')) {
-    const spaceIndex = text.indexOf(' ');
-    if (spaceIndex !== -1) {
-      const targetName = text.substring(1, spaceIndex).toLowerCase();
-      cleanText = text.substring(spaceIndex + 1);
-      
-      // Look for a peer with matching name or matching ID
-      targetPeer = Object.values(connections).find(c => 
-        c.name.toLowerCase() === targetName || c.conn.peer === targetName
-      );
-      
-      if (targetPeer) {
-        isPrivate = true;
-      } else {
-        appendMessage("System", "User not found for private message.", true);
-        return;
-      }
-    }
-  }
-
-  if (isPrivate && targetPeer) {
-    targetPeer.conn.send({ type: 'chat', message: cleanText, isPrivate: true });
-    appendMessage(`You [Private to ${targetPeer.name}]`, cleanText, true);
-  } else {
-    Object.values(connections).forEach(c => c.conn.send({ type: 'chat', message: text, isPrivate: false }));
-    appendMessage("You", text, false);
-  }
-
-  chatInput.value = "";
-}
-
-function appendMessage(sender, text, isPrivate) {
-  const div = document.createElement('div');
-  div.className = isPrivate ? 'msg private' : 'msg';
-  div.innerHTML = `<b>${sender}</b> ${text}`;
-  chatBox.appendChild(div);
-  chatBox.scrollTop = chatBox.scrollHeight;
-}
-
-// Controls
 function toggleMute(btn) {
   if (!localStream) return;
   const track = localStream.getAudioTracks()[0];
@@ -205,13 +158,11 @@ function toggleMute(btn) {
 }
 
 function toggleVideo(btn) {
-  if (!localStream) return;
+  if (!localStream || localStream.getVideoTracks().length === 0) return;
   const track = localStream.getVideoTracks()[0];
-  if (track) {
-    track.enabled = !track.enabled;
-    btn.classList.toggle('off');
-    btn.innerText = track.enabled ? "📷" : "🚫";
-  }
+  track.enabled = !track.enabled;
+  btn.classList.toggle('off');
+  btn.innerText = track.enabled ? "📷" : "🚫";
 }
 
 function addVideoStream(stream, displayName, isLocal, id) {
@@ -230,9 +181,7 @@ function addVideoStream(stream, displayName, isLocal, id) {
   if (isLocal) {
     nameInput.addEventListener('input', () => {
       nameTag.innerText = nameInput.value || "You (Local)";
-      Object.values(connections).forEach(c => {
-        c.conn.send({ type: 'name-update', name: nameInput.value || "User " + peer.id });
-      });
+      Object.values(connections).forEach(c => c.conn.send({ type: 'name-update', name: nameInput.value || "User " + peer.id }));
     });
     const controls = document.createElement('div');
     controls.className = 'video-controls';
@@ -241,6 +190,37 @@ function addVideoStream(stream, displayName, isLocal, id) {
   }
   container.append(video, nameTag);
   videoGrid.append(container);
+}
+
+function sendMsg() {
+  const text = chatInput.value.trim();
+  if (!text) return;
+  let targetPeer = null; let cleanText = text; let isPrivate = false;
+  if (text.startsWith('@')) {
+    const spaceIndex = text.indexOf(' ');
+    if (spaceIndex !== -1) {
+      const targetName = text.substring(1, spaceIndex).toLowerCase();
+      cleanText = text.substring(spaceIndex + 1);
+      targetPeer = Object.values(connections).find(c => c.name.toLowerCase() === targetName || c.conn.peer === targetName);
+      if (targetPeer) isPrivate = true;
+    }
+  }
+  if (isPrivate) {
+    targetPeer.conn.send({ type: 'chat', message: cleanText, isPrivate: true });
+    appendMessage(`You [Private to ${targetPeer.name}]`, cleanText, true);
+  } else {
+    Object.values(connections).forEach(c => c.conn.send({ type: 'chat', message: text, isPrivate: false }));
+    appendMessage("You", text, false);
+  }
+  chatInput.value = "";
+}
+
+function appendMessage(sender, text, isPrivate) {
+  const div = document.createElement('div');
+  div.className = isPrivate ? 'msg private' : 'msg';
+  div.innerHTML = `<b>${sender}</b> ${text}`;
+  chatBox.appendChild(div);
+  chatBox.scrollTop = chatBox.scrollHeight;
 }
 
 chatInput.addEventListener("keypress", (e) => { if (e.key === "Enter") sendMsg(); });
