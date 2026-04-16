@@ -59,32 +59,33 @@ let connections = {};
 
 initPeer();
 
-// SMART MEDIA START
+// SMART MEDIA LOGIC
 async function startMedia() {
   let stream;
   try {
-    // Attempt 1: Video + Audio
+    // Try to get both camera and mic
     stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
   } catch (e) {
-    console.warn("Camera failed, trying Audio only...");
+    console.warn("Camera failed, trying mic only...");
     try {
-      // Attempt 2: Audio Only
+      // If camera fails, try just the mic
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch (e2) {
-      console.error("Microphone also failed.");
+      console.error("No mic or camera found.");
     }
   }
 
-  // Create local placeholder if video is missing
+  // If no video track exists, create a dummy "No Camera" box
   if (!stream || stream.getVideoTracks().length === 0) {
     const canvas = document.createElement('canvas');
     canvas.width = 640; canvas.height = 480;
     const ctx = canvas.getContext('2d');
     ctx.fillStyle = '#222'; ctx.fillRect(0,0,640,480);
-    ctx.fillStyle = '#666'; ctx.font = "30px Arial"; ctx.textAlign = "center";
-    ctx.fillText("No Camera", 320, 240);
+    ctx.fillStyle = '#888'; ctx.font = "bold 40px Segoe UI"; ctx.textAlign = "center";
+    ctx.fillText("No Camera Found", 320, 240);
     
     const canvasStream = canvas.captureStream();
+    // Add audio track to the canvas stream so people can still hear you
     if (stream) stream.getAudioTracks().forEach(t => canvasStream.addTrack(t));
     localStream = canvasStream;
   } else {
