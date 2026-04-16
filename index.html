@@ -2,229 +2,263 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pro Group P2P Call</title>
+  <title>P2P Cloud Call & Chat</title>
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <style>
-    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:#111; color:#eee; margin:0; display: flex; height: 100vh; overflow: hidden; }
-    .main-container { flex: 1; display: flex; flex-direction: column; padding: 15px; }
-    #video-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 15px; flex-grow: 1; overflow-y: auto; align-content: start; }
-    .video-container { position: relative; background: #000; border-radius: 12px; overflow: hidden; border: 2px solid #333; height: 300px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
-    video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); display: block; }
-    .name-tag { position: absolute; bottom: 15px; left: 15px; background: rgba(0,0,0,0.8); padding: 5px 12px; border-radius: 6px; font-size: 14px; font-weight: bold; color: #fff; z-index: 20; border: 1px solid rgba(255,255,255,0.2); }
-    .video-controls { position: absolute; top: 10px; right: 10px; z-index: 20; display: flex; gap: 5px; }
-    .icon-btn { background: rgba(0,0,0,0.6); border: 1px solid #444; color: white; padding: 8px; border-radius: 50%; cursor: pointer; width: 35px; height: 35px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
-    .icon-btn.off { background: #dc3545; border-color: #dc3545; }
-    .sidebar { width: 320px; background: #1a1a1a; border-left: 1px solid #333; display: flex; flex-direction: column; }
-    #chat-box { flex: 1; padding: 15px; overflow-y: auto; scroll-behavior: smooth; }
-    .msg { margin-bottom: 12px; padding: 10px; border-radius: 8px; background: #2a2a2a; border-left: 4px solid #007bff; font-size: 14px; }
-    .msg b { color: #00d4ff; display: block; margin-bottom: 2px; }
-    .msg.private { border-left-color: #ff00ff; background: #2d1a2d; }
-    .msg.private b { color: #ff00ff; }
-    .input-area { padding: 15px; background: #111; display: flex; gap: 8px; border-top: 1px solid #333; }
-    .controls { background: #222; padding: 15px; border-radius: 12px; margin-bottom: 15px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; border: 1px solid #333; }
-    input { padding: 10px; border-radius: 6px; border: 1px solid #444; background: #000; color: #fff; outline: none; flex: 1; min-width: 120px; }
-    .btn-main { padding: 10px 20px; cursor: pointer; border-radius: 6px; border: none; background: #007bff; color: white; font-weight: bold; transition: 0.2s; }
+    :root { --primary: #007bff; --bg: #0d1117; --panel: #161b22; --text: #c9d1d9; --border: #30363d; }
+    body { font-family: -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; display: flex; height: 100vh; }
+    
+    /* Login */
+    #auth-overlay { position: fixed; inset: 0; background: var(--bg); z-index: 100; display: flex; align-items: center; justify-content: center; }
+    .auth-box { background: var(--panel); padding: 30px; border-radius: 8px; border: 1px solid var(--border); width: 320px; text-align: center; }
+    
+    /* Layout */
+    .sidebar { width: 300px; background: var(--panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+    .main { flex: 1; display: flex; flex-direction: column; padding: 20px; position: relative; }
+    
+    /* Call History & List */
+    .history-item { padding: 12px; border-bottom: 1px solid var(--border); cursor: pointer; font-size: 14px; display: flex; justify-content: space-between; }
+    .history-item:hover { background: #21262d; }
+    .status-dot { width: 10px; height: 10px; border-radius: 50%; background: #6e7681; align-self: center; }
+    .status-dot.online { background: #238636; box-shadow: 0 0 5px #238636; }
+
+    /* Video Grid */
+    #video-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px; flex: 1; overflow-y: auto; }
+    .video-container { position: relative; background: #000; height: 280px; border-radius: 8px; border: 1px solid var(--border); overflow: hidden; }
+    video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+    .name-tag { position: absolute; bottom: 10px; left: 10px; background: rgba(0,0,0,0.7); padding: 4px 10px; border-radius: 4px; font-size: 12px; z-index: 5; }
+
+    /* Controls */
+    input { width: 100%; padding: 10px; margin: 8px 0; border-radius: 6px; border: 1px solid var(--border); background: #0d1117; color: white; box-sizing: border-box; }
+    .btn { background: #238636; color: white; border: none; padding: 10px; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; transition: 0.2s; }
+    .btn:hover { background: #2ea043; }
+    .btn-call { width: 100px; background: var(--primary); }
+
+    #chat-area { height: 180px; background: #0d1117; border: 1px solid var(--border); border-radius: 6px; overflow-y: auto; padding: 10px; margin-top: 15px; font-size: 14px; }
+    .msg { margin-bottom: 5px; }
+    .msg b { color: var(--primary); }
   </style>
 </head>
 <body>
 
-<div class="main-container">
-  <div class="controls">
-    <div><b>ID:</b> <span id="my-id-display" style="color:#00d4ff">...</span></div>
-    <input type="text" id="user-name" placeholder="Your Name">
-    <input type="text" id="join-id" placeholder="Friend's 6-digit ID">
-    <button class="btn-main" onclick="handleJoinClick()">Join Call</button>
+<div id="auth-overlay">
+  <div class="auth-box">
+    <h2 style="margin-top:0">P2P Secure</h2>
+    <input type="text" id="auth-user" placeholder="Username">
+    <input type="password" id="auth-pass" placeholder="Password">
+    <button class="btn" id="login-btn" onclick="handleAuth()">Login / Create Account</button>
+    <p id="auth-msg" style="color:#f85149; font-size:12px; margin-top:10px;"></p>
   </div>
-  <div id="video-grid"></div>
 </div>
 
 <div class="sidebar">
-  <div id="chat-box"></div>
-  <div class="input-area">
-    <input type="text" id="chat-input" placeholder="Message (use @name for private)..." style="flex:1">
-    <button class="btn-main" onclick="sendMsg()">Send</button>
+  <div style="padding: 15px; border-bottom: 1px solid var(--border); background: #21262d;"><b>Users & Call History</b></div>
+  <div id="history-list" style="flex:1; overflow-y:auto;"></div>
+  <div style="padding:15px; border-top: 1px solid var(--border);">
+    <button class="btn" onclick="location.reload()" style="background:#30363d">Logout</button>
+  </div>
+</div>
+
+<div class="main">
+  <div style="display:flex; gap:10px; margin-bottom:20px; align-items:center;">
+    <div style="font-size:14px;">Your ID: <b id="my-id-display" style="color:var(--primary)">...</b></div>
+    <input type="text" id="target-id" placeholder="Friend's 6-digit ID" style="flex:1">
+    <button class="btn btn-call" onclick="startCall()">Call</button>
+  </div>
+
+  <div id="video-grid"></div>
+
+  <div id="chat-area"></div>
+  <div style="display:flex; gap:8px; margin-top:10px;">
+    <input type="text" id="chat-input" placeholder="Message (use @name for private)...">
+    <button class="btn" onclick="sendChat()" style="width:80px;">Send</button>
   </div>
 </div>
 
 <script>
-const videoGrid = document.getElementById('video-grid');
-const chatBox = document.getElementById('chat-box');
-const chatInput = document.getElementById('chat-input');
-const nameInput = document.getElementById('user-name');
+// --- CONFIG ---
+const TOKEN = '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'; 
+const REPO = 'jihvijhojhviihogyuvi/call';
+const FILE = 'data.json';
 
+let globalData = { accounts: {}, chats: [] };
+let currentUser = null;
+let peer = null;
 let localStream = null;
-let peer;
-let connections = {}; 
+let activeConns = {};
 
-initPeer();
-
-// SMART MEDIA LOGIC
-async function startMedia() {
-  let stream;
-  try {
-    // Try to get both camera and mic
-    stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-  } catch (e) {
-    console.warn("Camera failed, trying mic only...");
+// --- GITHUB ENGINE ---
+async function githubSync(action = 'load', data = null) {
+    const url = `https://api.github.com/repos/${REPO}/contents/${FILE}`;
     try {
-      // If camera fails, try just the mic
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    } catch (e2) {
-      console.error("No mic or camera found.");
-    }
-  }
+        const res = await fetch(url, { headers: { Authorization: `token ${TOKEN}` }});
+        const json = await res.json();
+        const sha = json.sha;
 
-  // If no video track exists, create a dummy "No Camera" box
-  if (!stream || stream.getVideoTracks().length === 0) {
-    const canvas = document.createElement('canvas');
-    canvas.width = 640; canvas.height = 480;
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#222'; ctx.fillRect(0,0,640,480);
-    ctx.fillStyle = '#888'; ctx.font = "bold 40px Segoe UI"; ctx.textAlign = "center";
-    ctx.fillText("No Camera Found", 320, 240);
+        if (action === 'load') {
+            const content = json.content ? JSON.parse(atob(json.content)) : { accounts: {}, chats: [] };
+            globalData = content;
+            return content;
+        }
+
+        if (action === 'save') {
+            await fetch(url, {
+                method: 'PUT',
+                headers: { Authorization: `token ${TOKEN}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    message: 'Cloud Sync Update',
+                    content: btoa(JSON.stringify(data, null, 2)),
+                    sha: sha
+                })
+            });
+        }
+    } catch (e) { console.error("Sync Error:", e); }
+}
+
+// --- AUTH ---
+async function handleAuth() {
+    const user = document.getElementById('auth-user').value.trim().toLowerCase();
+    const pass = document.getElementById('auth-pass').value.trim();
+    const btn = document.getElementById('login-btn');
+    const msg = document.getElementById('auth-msg');
+
+    if(!user || !pass) return;
+    btn.innerText = "Connecting...";
+    btn.disabled = true;
+
+    await githubSync('load');
+
+    if (globalData.accounts[user]) {
+        if (globalData.accounts[user].pass !== pass) {
+            msg.innerText = "Incorrect password for this user.";
+            btn.innerText = "Login / Create Account";
+            btn.disabled = false;
+            return;
+        }
+    } else {
+        // Create new
+        const newId = Math.floor(100000 + Math.random()*900000).toString();
+        globalData.accounts[user] = { pass: pass, id: newId };
+        await githubSync('save', globalData);
+    }
+
+    currentUser = { name: user, id: globalData.accounts[user].id };
+    document.getElementById('auth-overlay').style.display = 'none';
+    startApp();
+}
+
+async function startApp() {
+    document.getElementById('my-id-display').innerText = currentUser.id;
+    peer = new Peer(currentUser.id);
+
+    // Get Media
+    try {
+        localStream = await navigator.mediaDevices.getUserMedia({video: true, audio: true});
+    } catch (e) {
+        // No Cam Fallback
+        const canvas = document.createElement('canvas');
+        canvas.width = 640; canvas.height = 480;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#222'; ctx.fillRect(0,0,640,480);
+        ctx.fillStyle = '#555'; ctx.font = "30px Arial"; ctx.textAlign="center";
+        ctx.fillText("No Camera", 320, 240);
+        localStream = canvas.captureStream();
+    }
+    renderVideo(localStream, "You (" + currentUser.name + ")", 'local');
+
+    peer.on('call', call => {
+        call.answer(localStream);
+        call.on('stream', s => renderVideo(s, "User " + call.peer, call.peer));
+    });
+
+    peer.on('connection', conn => handleDataConn(conn));
     
-    const canvasStream = canvas.captureStream();
-    // Add audio track to the canvas stream so people can still hear you
-    if (stream) stream.getAudioTracks().forEach(t => canvasStream.addTrack(t));
-    localStream = canvasStream;
-  } else {
-    localStream = stream;
-  }
-
-  addVideoStream(localStream, "You (Local)", true, "local-user");
+    // Load existing messages from Cloud
+    globalData.chats.forEach(m => appendChat(m.u, m.t, m.time));
+    updateUserList();
 }
 
-startMedia();
-
-function initPeer() {
-  const myId = Math.floor(100000 + Math.random() * 900000).toString();
-  document.getElementById('my-id-display').innerText = myId;
-  peer = new Peer(myId);
-
-  peer.on('call', call => {
-    call.answer(localStream);
-    call.on('stream', userStream => addVideoStream(userStream, "Loading...", false, call.peer));
-  });
-
-  peer.on('connection', conn => setupChatConnection(conn, true));
-}
-
-function handleJoinClick() {
-  const targetId = document.getElementById('join-id').value;
-  connectToPeer(targetId);
-}
-
-function connectToPeer(targetId) {
-  if (!targetId || targetId === peer.id || connections[targetId]) return;
-  peer.call(targetId, localStream).on('stream', s => addVideoStream(s, "Loading...", false, targetId));
-  setupChatConnection(peer.connect(targetId), false);
-}
-
-function setupChatConnection(conn, isIncoming) {
-  conn.on('open', () => {
-    connections[conn.peer] = { conn, name: "User " + conn.peer };
-    conn.send({ type: 'name-update', name: nameInput.value || "User " + peer.id });
-
-    if (isIncoming) {
-      const knownPeers = Object.keys(connections).filter(id => id !== conn.peer);
-      if (knownPeers.length > 0) conn.send({ type: 'mesh-intro', peerIds: knownPeers });
-    }
-
-    conn.on('data', data => {
-      if (data.type === 'name-update') {
-        connections[conn.peer].name = data.name;
-        const tag = document.querySelector(`[data-id="${conn.peer}"] .name-tag`);
-        if (tag) tag.innerText = data.name;
-      }
-      if (data.type === 'chat') appendMessage(connections[conn.peer].name, data.message, data.isPrivate);
-      if (data.type === 'mesh-intro') data.peerIds.forEach(id => connectToPeer(id));
+function handleDataConn(conn) {
+    conn.on('open', () => {
+        activeConns[conn.peer] = conn;
+        updateUserList();
+        conn.on('data', data => {
+            if(data.type === 'chat') {
+                appendChat(data.name, data.text);
+                saveChatToCloud(data.name, data.text);
+            }
+        });
     });
+    conn.on('close', () => { delete activeConns[conn.peer]; updateUserList(); });
+}
 
-    conn.on('close', () => {
-      document.querySelector(`[data-id="${conn.peer}"]`)?.remove();
-      delete connections[conn.peer];
+function startCall(id) {
+    const tid = id || document.getElementById('target-id').value;
+    if(!tid || tid === currentUser.id || activeConns[tid]) return;
+
+    const conn = peer.connect(tid);
+    handleDataConn(conn);
+    peer.call(tid, localStream).on('stream', s => renderVideo(s, "Partner", tid));
+}
+
+function saveChatToCloud(u, t) {
+    globalData.chats.push({u, t, time: new Date().toLocaleTimeString()});
+    // Limit history to 50 messages to keep file small
+    if(globalData.chats.length > 50) globalData.chats.shift();
+    githubSync('save', globalData);
+}
+
+function sendChat() {
+    const input = document.getElementById('chat-input');
+    const text = input.value.trim();
+    if(!text) return;
+
+    Object.values(activeConns).forEach(c => c.send({type:'chat', name:currentUser.name, text}));
+    appendChat("You", text);
+    saveChatToCloud(currentUser.name, text);
+    input.value = "";
+}
+
+function updateUserList() {
+    const list = document.getElementById('history-list');
+    list.innerHTML = "";
+    Object.keys(globalData.accounts).forEach(uname => {
+        if(uname === currentUser.name) return;
+        const uid = globalData.accounts[uname].id;
+        const item = document.createElement('div');
+        item.className = 'history-item';
+        const isOnline = activeConns[uid] ? 'online' : '';
+        item.innerHTML = `<span><b>${uname}</b> <br><small>${uid}</small></span> <div class="status-dot ${isOnline}"></div>`;
+        item.onclick = () => {
+            if(!activeConns[uid]) {
+                startCall(uid);
+                setTimeout(() => { if(!activeConns[uid]) alert(uname + " is offline"); }, 3000);
+            }
+        };
+        list.appendChild(item);
     });
-  });
 }
 
-function toggleMute(btn) {
-  if (!localStream) return;
-  const track = localStream.getAudioTracks()[0];
-  if (track) {
-    track.enabled = !track.enabled;
-    btn.classList.toggle('off');
-    btn.innerText = track.enabled ? "🎤" : "🔇";
-  }
+function renderVideo(stream, name, id) {
+    if(document.getElementById('vid-'+id)) return;
+    const div = document.createElement('div');
+    div.className = 'video-container';
+    div.id = 'vid-'+id;
+    const vid = document.createElement('video');
+    vid.srcObject = stream;
+    vid.autoplay = true;
+    vid.playsInline = true;
+    if(id === 'local') vid.muted = true;
+    div.innerHTML = `<div class="name-tag">${name}</div>`;
+    div.appendChild(vid);
+    document.getElementById('video-grid').appendChild(div);
 }
 
-function toggleVideo(btn) {
-  if (!localStream || localStream.getVideoTracks().length === 0) return;
-  const track = localStream.getVideoTracks()[0];
-  track.enabled = !track.enabled;
-  btn.classList.toggle('off');
-  btn.innerText = track.enabled ? "📷" : "🚫";
+function appendChat(u, t, time = "") {
+    const area = document.getElementById('chat-area');
+    area.innerHTML += `<div class="msg"><b>${u}:</b> ${t} <small style="color:#555">${time}</small></div>`;
+    area.scrollTop = area.scrollHeight;
 }
-
-function addVideoStream(stream, displayName, isLocal, id) {
-  if (document.querySelector(`[data-id="${id}"]`)) return;
-  const container = document.createElement('div');
-  container.className = 'video-container';
-  container.setAttribute('data-id', id);
-  const video = document.createElement('video');
-  video.srcObject = stream;
-  video.playsInline = true;
-  video.addEventListener('loadedmetadata', () => video.play());
-  const nameTag = document.createElement('div');
-  nameTag.className = 'name-tag';
-  nameTag.innerText = isLocal ? (nameInput.value || "You (Local)") : displayName;
-
-  if (isLocal) {
-    nameInput.addEventListener('input', () => {
-      nameTag.innerText = nameInput.value || "You (Local)";
-      Object.values(connections).forEach(c => c.conn.send({ type: 'name-update', name: nameInput.value || "User " + peer.id }));
-    });
-    const controls = document.createElement('div');
-    controls.className = 'video-controls';
-    controls.innerHTML = `<button class="icon-btn" onclick="toggleMute(this)">🎤</button><button class="icon-btn" onclick="toggleVideo(this)">📷</button>`;
-    container.appendChild(controls);
-  }
-  container.append(video, nameTag);
-  videoGrid.append(container);
-}
-
-function sendMsg() {
-  const text = chatInput.value.trim();
-  if (!text) return;
-  let targetPeer = null; let cleanText = text; let isPrivate = false;
-  if (text.startsWith('@')) {
-    const spaceIndex = text.indexOf(' ');
-    if (spaceIndex !== -1) {
-      const targetName = text.substring(1, spaceIndex).toLowerCase();
-      cleanText = text.substring(spaceIndex + 1);
-      targetPeer = Object.values(connections).find(c => c.name.toLowerCase() === targetName || c.conn.peer === targetName);
-      if (targetPeer) isPrivate = true;
-    }
-  }
-  if (isPrivate) {
-    targetPeer.conn.send({ type: 'chat', message: cleanText, isPrivate: true });
-    appendMessage(`You [Private to ${targetPeer.name}]`, cleanText, true);
-  } else {
-    Object.values(connections).forEach(c => c.conn.send({ type: 'chat', message: text, isPrivate: false }));
-    appendMessage("You", text, false);
-  }
-  chatInput.value = "";
-}
-
-function appendMessage(sender, text, isPrivate) {
-  const div = document.createElement('div');
-  div.className = isPrivate ? 'msg private' : 'msg';
-  div.innerHTML = `<b>${sender}</b> ${text}`;
-  chatBox.appendChild(div);
-  chatBox.scrollTop = chatBox.scrollHeight;
-}
-
-chatInput.addEventListener("keypress", (e) => { if (e.key === "Enter") sendMsg(); });
 </script>
 </body>
 </html>
