@@ -1,25 +1,42 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Pro Group Video & Chat</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pro P2P Group Call</title>
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <style>
-    body { font-family: 'Segoe UI', sans-serif; background:#111; color:#eee; margin:0; display: flex; height: 100vh; overflow: hidden; }
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:#111; color:#eee; margin:0; display: flex; height: 100vh; overflow: hidden; }
+    
+    /* Main Layout */
     .main-container { flex: 1; display: flex; flex-direction: column; padding: 15px; }
     #video-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 15px; flex-grow: 1; overflow-y: auto; align-content: start; }
+    
+    /* Video Container & Fixes */
     .video-container { position: relative; background: #000; border-radius: 12px; overflow: hidden; border: 2px solid #333; height: 300px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
     video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); display: block; }
+    
+    /* UI Overlays */
     .name-tag { position: absolute; bottom: 15px; left: 15px; background: rgba(0,0,0,0.8); padding: 5px 12px; border-radius: 6px; font-size: 14px; font-weight: bold; color: #fff; z-index: 20; border: 1px solid rgba(255,255,255,0.2); }
     .video-controls { position: absolute; top: 10px; right: 10px; z-index: 20; display: flex; gap: 5px; }
-    .icon-btn { background: rgba(0,0,0,0.6); border: 1px solid #444; color: white; padding: 8px; border-radius: 50%; cursor: pointer; width: 35px; height: 35px; display: flex; align-items: center; justify-content: center; }
+    
+    /* Buttons */
+    .icon-btn { background: rgba(0,0,0,0.6); border: 1px solid #444; color: white; padding: 8px; border-radius: 50%; cursor: pointer; width: 35px; height: 35px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
     .icon-btn.off { background: #dc3545; border-color: #dc3545; }
+    
+    /* Sidebar Chat */
     .sidebar { width: 320px; background: #1a1a1a; border-left: 1px solid #333; display: flex; flex-direction: column; }
-    #chat-box { flex: 1; padding: 15px; overflow-y: auto; }
-    .msg { margin-bottom: 12px; padding: 10px; border-radius: 8px; background: #2a2a2a; border-left: 4px solid #007bff; }
+    #chat-box { flex: 1; padding: 15px; overflow-y: auto; scroll-behavior: smooth; }
+    .msg { margin-bottom: 12px; padding: 10px; border-radius: 8px; background: #2a2a2a; border-left: 4px solid #007bff; font-size: 14px; line-height: 1.4; }
+    .msg b { color: #00d4ff; display: block; margin-bottom: 2px; }
     .input-area { padding: 15px; background: #111; display: flex; gap: 8px; border-top: 1px solid #333; }
-    .controls { background: #222; padding: 15px; border-radius: 12px; margin-bottom: 15px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
-    input { padding: 10px; border-radius: 6px; border: 1px solid #444; background: #000; color: #fff; outline: none; }
-    .btn-main { padding: 10px 20px; cursor: pointer; border-radius: 6px; border: none; background: #007bff; color: white; font-weight: bold; }
+    
+    /* Header Controls */
+    .controls { background: #222; padding: 15px; border-radius: 12px; margin-bottom: 15px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; border: 1px solid #333; }
+    input { padding: 10px; border-radius: 6px; border: 1px solid #444; background: #000; color: #fff; outline: none; flex: 1; min-width: 120px; }
+    input:focus { border-color: #007bff; }
+    .btn-main { padding: 10px 20px; cursor: pointer; border-radius: 6px; border: none; background: #007bff; color: white; font-weight: bold; transition: 0.2s; }
+    .btn-main:hover { background: #0056b3; }
   </style>
 </head>
 <body>
@@ -28,7 +45,7 @@
   <div class="controls">
     <div><b>ID:</b> <span id="my-id-display" style="color:#00d4ff">...</span></div>
     <input type="text" id="user-name" placeholder="Your Name">
-    <input type="text" id="join-id" placeholder="Friend's ID">
+    <input type="text" id="join-id" placeholder="Friend's 6-digit ID">
     <button class="btn-main" onclick="connectToPeer()">Join Call</button>
   </div>
   <div id="video-grid"></div>
@@ -48,26 +65,44 @@ const chatBox = document.getElementById('chat-box');
 const chatInput = document.getElementById('chat-input');
 const nameInput = document.getElementById('user-name');
 
-let localStream;
+let localStream = null;
 let peer;
 let connections = {}; 
 
-navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then(stream => {
-  localStream = stream;
-  addVideoStream(stream, "You (Local)", true, "local-user");
-  initPeer();
-}).catch(err => alert("Camera error: " + err.message));
+// Initialize Peer ID immediately so the page works without a camera
+initPeer();
+
+// Try to get camera, but continue if it fails
+async function startMedia() {
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    addVideoStream(localStream, "You (Local)", true, "local-user");
+  } catch (err) {
+    console.warn("Camera/Mic access denied or not found.");
+    // Create a blank placeholder stream if no camera
+    const canvas = document.createElement('canvas');
+    canvas.width = 640; canvas.height = 480;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#222'; ctx.fillRect(0, 0, 640, 480);
+    ctx.fillStyle = '#666'; ctx.font = "30px Arial"; ctx.fillText("No Camera Found", 200, 240);
+    addVideoStream(canvas.captureStream(), "You (No Camera)", true, "local-user");
+  }
+}
+
+startMedia();
 
 function initPeer() {
   const myId = Math.floor(100000 + Math.random() * 900000).toString();
   document.getElementById('my-id-display').innerText = myId;
   peer = new Peer(myId);
 
+  // Incoming Calls
   peer.on('call', call => {
     call.answer(localStream);
     call.on('stream', userStream => addVideoStream(userStream, "Loading...", false, call.peer));
   });
 
+  // Incoming Data (Chat/Names)
   peer.on('connection', conn => setupChatConnection(conn));
 }
 
@@ -75,41 +110,56 @@ function connectToPeer() {
   const targetId = document.getElementById('join-id').value;
   if (!targetId || targetId === peer.id) return;
 
+  // Video Connection
   peer.call(targetId, localStream).on('stream', s => addVideoStream(s, "Loading...", false, targetId));
+  
+  // Data Connection
   setupChatConnection(peer.connect(targetId));
 }
 
 function setupChatConnection(conn) {
   conn.on('open', () => {
-    // 1. Send our name to the other person as soon as we connect
+    // Send our name to them immediately
     conn.send({ type: 'name-update', name: nameInput.value || "User " + peer.id });
     
     connections[conn.peer] = { conn, name: "User " + conn.peer };
 
     conn.on('data', data => {
       if (data.type === 'name-update') {
-        // 2. Update the name tag on the video when they send us their name
         connections[conn.peer].name = data.name;
         const tag = document.querySelector(`[data-id="${conn.peer}"] .name-tag`);
         if (tag) tag.innerText = data.name;
       }
-      if (data.type === 'chat') appendMessage(connections[conn.peer].name, data.message);
+      if (data.type === 'chat') {
+        appendMessage(connections[conn.peer].name, data.message);
+      }
+    });
+
+    conn.on('close', () => {
+        document.querySelector(`[data-id="${conn.peer}"]`)?.remove();
+        delete connections[conn.peer];
     });
   });
 }
 
 function toggleMute(btn) {
-  const enabled = localStream.getAudioTracks()[0].enabled;
-  localStream.getAudioTracks()[0].enabled = !enabled;
-  btn.classList.toggle('off');
-  btn.innerText = !enabled ? "🎤" : "🔇";
+  if (!localStream) return;
+  const track = localStream.getAudioTracks()[0];
+  if (track) {
+    track.enabled = !track.enabled;
+    btn.classList.toggle('off');
+    btn.innerText = track.enabled ? "🎤" : "🔇";
+  }
 }
 
 function toggleVideo(btn) {
-  const enabled = localStream.getVideoTracks()[0].enabled;
-  localStream.getVideoTracks()[0].enabled = !enabled;
-  btn.classList.toggle('off');
-  btn.innerText = !enabled ? "📷" : "🚫";
+  if (!localStream) return;
+  const track = localStream.getVideoTracks()[0];
+  if (track) {
+    track.enabled = !track.enabled;
+    btn.classList.toggle('off');
+    btn.innerText = track.enabled ? "📷" : "🚫";
+  }
 }
 
 function addVideoStream(stream, displayName, isLocal, id) {
@@ -127,16 +177,15 @@ function addVideoStream(stream, displayName, isLocal, id) {
   nameTag.className = 'name-tag';
   nameTag.innerText = isLocal ? (nameInput.value || "You (Local)") : displayName;
 
-  // Listen for name input changes to update local tag instantly
-  if(isLocal) {
-    nameInput.addEventListener('input', () => {
-        nameTag.innerText = nameInput.value || "You (Local)";
-        // Broadast name change to others
-        Object.values(connections).forEach(c => c.conn.send({type: 'name-update', name: nameInput.value || "User " + peer.id}));
-    });
-  }
-
   if (isLocal) {
+    // Listen for name changes to update locally and broadcast
+    nameInput.addEventListener('input', () => {
+      nameTag.innerText = nameInput.value || "You (Local)";
+      Object.values(connections).forEach(c => {
+        c.conn.send({ type: 'name-update', name: nameInput.value || "User " + peer.id });
+      });
+    });
+
     const controls = document.createElement('div');
     controls.className = 'video-controls';
     controls.innerHTML = `
@@ -161,7 +210,7 @@ function sendMsg() {
 function appendMessage(sender, text) {
   const div = document.createElement('div');
   div.className = 'msg';
-  div.innerHTML = `<b>${sender}:</b> ${text}`;
+  div.innerHTML = `<b>${sender}</b> ${text}`;
   chatBox.appendChild(div);
   chatBox.scrollTop = chatBox.scrollHeight;
 }
