@@ -9,7 +9,13 @@
       "id": "673588"
     }
   },
-  "chats": [],
+  "chats": [
+    {
+      "u": "char",
+      "t": "hello",
+      "time": "7:08:35 PM"
+    }
+  ],
   "test_logs": [
     {
       "timestamp": "2026-04-16T23:02:05.159Z",
