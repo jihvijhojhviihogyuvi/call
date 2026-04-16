@@ -1,55 +1,56 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Group Video, Chat & Names</title>
+  <title>Pro Group Video & Chat</title>
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <style>
-    body { font-family: 'Segoe UI', sans-serif; background:#1a1a1a; color:#eee; margin:0; display: flex; height: 100vh; overflow: hidden; }
+    body { font-family: 'Segoe UI', sans-serif; background:#111; color:#eee; margin:0; display: flex; height: 100vh; overflow: hidden; }
     
-    /* Main Layout */
+    /* Layout */
     .main-container { flex: 1; display: flex; flex-direction: column; padding: 15px; }
-    #video-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 15px; flex-grow: 1; overflow-y: auto; }
+    #video-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 15px; flex-grow: 1; overflow-y: auto; align-content: start; }
     
-    /* Video Container */
-    .video-container { position: relative; background: #000; border-radius: 12px; overflow: hidden; border: 2px solid #333; height: 200px; }
-    video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
-    .name-tag { position: absolute; bottom: 8px; left: 8px; background: rgba(0,0,0,0.6); padding: 2px 8px; border-radius: 4px; font-size: 12px; color: #fff; z-index: 10; }
-
-    /* Sidebar Chat */
-    .sidebar { width: 320px; background: #252525; border-left: 1px solid #444; display: flex; flex-direction: column; }
-    #chat-box { flex: 1; padding: 15px; overflow-y: auto; font-size: 14px; }
-    .msg { margin-bottom: 10px; padding: 8px; border-radius: 8px; background: #333; }
-    .msg b { color: #00d4ff; }
-    .input-area { padding: 15px; background: #1a1a1a; display: flex; gap: 8px; border-top: 1px solid #444; }
+    /* Video Box Fixes */
+    .video-container { position: relative; background: #000; border-radius: 12px; overflow: hidden; border: 2px solid #333; height: 300px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+    video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); display: block; }
     
-    /* Controls */
-    .controls { background: #333; padding: 15px; border-radius: 12px; margin-bottom: 15px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
-    input { padding: 8px; border-radius: 6px; border: 1px solid #555; background: #222; color: #fff; outline: none; }
-    input:focus { border-color: #007bff; }
-    button { padding: 8px 16px; cursor: pointer; border-radius: 6px; border: none; background: #28a745; color: white; font-weight: bold; transition: 0.2s; }
-    button:hover { background: #218838; }
-    #my-id-display { color: #ffcc00; font-weight: bold; }
+    /* UI Overlays */
+    .name-tag { position: absolute; bottom: 15px; left: 15px; background: rgba(0,0,0,0.7); padding: 5px 12px; border-radius: 6px; font-size: 14px; font-weight: bold; color: #fff; z-index: 20; pointer-events: none; border: 1px solid rgba(255,255,255,0.2); }
+    .video-controls { position: absolute; top: 10px; right: 10px; z-index: 20; display: flex; gap: 5px; }
+    
+    /* Buttons */
+    .icon-btn { background: rgba(0,0,0,0.6); border: 1px solid #444; color: white; padding: 8px; border-radius: 50%; cursor: pointer; width: 35px; height: 35px; display: flex; align-items: center; justify-content: center; }
+    .icon-btn.off { background: #dc3545; border-color: #dc3545; }
+    
+    /* Sidebar */
+    .sidebar { width: 320px; background: #1a1a1a; border-left: 1px solid #333; display: flex; flex-direction: column; }
+    #chat-box { flex: 1; padding: 15px; overflow-y: auto; }
+    .msg { margin-bottom: 12px; padding: 10px; border-radius: 8px; background: #2a2a2a; border-left: 4px solid #007bff; }
+    .input-area { padding: 15px; background: #111; display: flex; gap: 8px; border-top: 1px solid #333; }
+    
+    /* Top Bar */
+    .controls { background: #222; padding: 15px; border-radius: 12px; margin-bottom: 15px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+    input { padding: 10px; border-radius: 6px; border: 1px solid #444; background: #000; color: #fff; outline: none; }
+    .btn-main { padding: 10px 20px; cursor: pointer; border-radius: 6px; border: none; background: #007bff; color: white; font-weight: bold; }
   </style>
 </head>
 <body>
 
 <div class="main-container">
   <div class="controls">
-    <div><b>Your ID:</b> <span id="my-id-display">...</span></div>
-    <input type="text" id="user-name" placeholder="Your Name (Optional)">
-    <div style="border-left: 1px solid #555; height: 20px; margin: 0 10px;"></div>
+    <div><b>ID:</b> <span id="my-id-display" style="color:#00d4ff">...</span></div>
+    <input type="text" id="user-name" placeholder="Enter Your Name">
     <input type="text" id="join-id" placeholder="Friend's 6-digit ID">
-    <button onclick="connectToPeer()">Connect</button>
+    <button class="btn-main" onclick="connectToPeer()">Join Call</button>
   </div>
-
   <div id="video-grid"></div>
 </div>
 
 <div class="sidebar">
   <div id="chat-box"></div>
   <div class="input-area">
-    <input type="text" id="chat-input" placeholder="Message..." style="flex:1">
-    <button onclick="sendMsg()">Send</button>
+    <input type="text" id="chat-input" placeholder="Type message..." style="flex:1">
+    <button class="btn-main" onclick="sendMsg()">Send</button>
   </div>
 </div>
 
@@ -63,88 +64,64 @@ let localStream;
 let peer;
 let connections = {}; 
 
-// 1. Get Camera and Setup
+// 1. Get Camera
 navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then(stream => {
   localStream = stream;
   addVideoStream(stream, "You (Local)", true, "local-user");
   initPeer();
-}).catch(err => alert("Camera error: " + err.message));
+}).catch(err => alert("Please allow camera access!"));
 
 function initPeer() {
   const myId = Math.floor(100000 + Math.random() * 900000).toString();
   document.getElementById('my-id-display').innerText = myId;
   peer = new Peer(myId);
 
-  // Incoming Video
   peer.on('call', call => {
-    // When someone calls us, we send our metadata (name) in the call options if possible,
-    // but standard PeerJS uses the data connection for metadata.
     call.answer(localStream);
-    call.on('stream', userStream => {
-      // We'll update the name once the data connection is established
-      addVideoStream(userStream, call.peer, false, call.peer);
-    });
+    call.on('stream', userStream => addVideoStream(userStream, "User " + call.peer, false, call.peer));
   });
 
-  // Incoming Text/Data
-  peer.on('connection', conn => {
-    setupChatConnection(conn);
-  });
+  peer.on('connection', conn => setupChatConnection(conn));
 }
 
 function connectToPeer() {
   const targetId = document.getElementById('join-id').value;
   if (!targetId || targetId === peer.id) return;
 
-  // Start Video
   const call = peer.call(targetId, localStream);
-  call.on('stream', userStream => addVideoStream(userStream, targetId, false, targetId));
+  call.on('stream', userStream => addVideoStream(userStream, "User " + targetId, false, targetId));
 
-  // Start Data (for chat and names)
-  const conn = peer.connect(targetId, {
-    metadata: { name: nameInput.value || peer.id }
-  });
+  const conn = peer.connect(targetId, { metadata: { name: nameInput.value || "Anonymous" } });
   setupChatConnection(conn);
 }
 
 function setupChatConnection(conn) {
-  connections[conn.peer] = { conn, name: conn.metadata?.name || conn.peer };
+  connections[conn.peer] = { conn, name: conn.metadata?.name || "Anonymous" };
   
-  // Update the video label if it exists
-  const label = document.querySelector(`[data-id="${conn.peer}"] .name-tag`);
-  if (label) label.innerText = connections[conn.peer].name;
+  // Wait a second for video to mount, then update name
+  setTimeout(() => {
+    const label = document.querySelector(`[data-id="${conn.peer}"] .name-tag`);
+    if (label) label.innerText = connections[conn.peer].name;
+  }, 1000);
 
   conn.on('data', data => {
-    if (data.type === 'chat') {
-      appendMessage(connections[conn.peer].name, data.message);
-    }
-  });
-
-  conn.on('close', () => {
-    document.querySelector(`[data-id="${conn.peer}"]`)?.remove();
-    delete connections[conn.peer];
+    if (data.type === 'chat') appendMessage(connections[conn.peer].name, data.message);
   });
 }
 
-function sendMsg() {
-  const msgText = chatInput.value;
-  const myName = nameInput.value || peer.id;
-  if (!msgText) return;
-
-  Object.values(connections).forEach(c => {
-    c.conn.send({ type: 'chat', message: msgText });
-  });
-  
-  appendMessage("You", msgText);
-  chatInput.value = "";
+// TOGGLE FUNCTIONS
+function toggleMute(btn) {
+  const enabled = localStream.getAudioTracks()[0].enabled;
+  localStream.getAudioTracks()[0].enabled = !enabled;
+  btn.classList.toggle('off');
+  btn.innerText = !enabled ? "🎤" : "🔇";
 }
 
-function appendMessage(sender, text) {
-  const div = document.createElement('div');
-  div.className = 'msg';
-  div.innerHTML = `<b>${sender}:</b> ${text}`;
-  chatBox.appendChild(div);
-  chatBox.scrollTop = chatBox.scrollHeight;
+function toggleVideo(btn) {
+  const enabled = localStream.getVideoTracks()[0].enabled;
+  localStream.getVideoTracks()[0].enabled = !enabled;
+  btn.classList.toggle('off');
+  btn.innerText = !enabled ? "📷" : "🚫";
 }
 
 function addVideoStream(stream, displayName, isLocal, id) {
@@ -156,19 +133,43 @@ function addVideoStream(stream, displayName, isLocal, id) {
 
   const video = document.createElement('video');
   video.srcObject = stream;
-  if (isLocal) video.muted = true;
   video.addEventListener('loadedmetadata', () => video.play());
 
   const nameTag = document.createElement('div');
   nameTag.className = 'name-tag';
   nameTag.innerText = displayName;
 
+  if (isLocal) {
+    const controls = document.createElement('div');
+    controls.className = 'video-controls';
+    controls.innerHTML = `
+      <button class="icon-btn" onclick="toggleMute(this)">🎤</button>
+      <button class="icon-btn" onclick="toggleVideo(this)">📷</button>
+    `;
+    container.appendChild(controls);
+  }
+
   container.append(video, nameTag);
   videoGrid.append(container);
 }
 
+function sendMsg() {
+  const text = chatInput.value;
+  if (!text) return;
+  Object.values(connections).forEach(c => c.conn.send({ type: 'chat', message: text }));
+  appendMessage("You", text);
+  chatInput.value = "";
+}
+
+function appendMessage(sender, text) {
+  const div = document.createElement('div');
+  div.className = 'msg';
+  div.innerHTML = `<b>${sender}:</b> ${text}`;
+  chatBox.appendChild(div);
+  chatBox.scrollTop = chatBox.scrollHeight;
+}
+
 chatInput.addEventListener("keypress", (e) => { if (e.key === "Enter") sendMsg(); });
 </script>
-
 </body>
 </html>
