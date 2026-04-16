@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>P2P Video Call (6-Digit Code)</title>
+  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center; background:#1a1a1a; color:#eee; padding: 20px; }
+    video { width: 45%; margin: 10px; background: #000; border-radius: 10px; border: 2px solid #444; }
+    input { padding: 10px; border-radius: 5px; border: none; width: 150px; font-size: 16px; margin: 10px; }
+    button { padding: 10px 20px; cursor: pointer; border-radius: 5px; border: none; background: #007bff; color: white; font-weight: bold; }
+    button:hover { background: #0056b3; }
+    #status { color: #00ff00; margin-top: 10px; font-family: monospace; }
+    .controls { background: #333; padding: 20px; border-radius: 15px; display: inline-block; }
+  </style>
+</head>
+<body>
+
+<h2>P2P Video Call</h2>
+
+<div class="controls">
+  <div>
+    <strong>Your ID:</strong> <span id="my-id">Generating...</span>
+  </div>
+  <br>
+  <input type="text" id="remote-id" placeholder="Enter 6-digit Code">
+  <button onclick="startCall()">Call</button>
+</div>
+
+<br>
+
+<video id="local" autoplay muted playsinline></video>
+<video id="remote" autoplay playsinline></video>
+
+<div id="status">Ready.</div>
+
+<script>
+// 1. Generate a random 6-digit ID
+const myId = Math.floor(100000 + Math.random() * 900000).toString();
+document.getElementById('my-id').innerText = myId;
+
+// 2. Initialize PeerJS with the 6-digit ID
+const peer = new Peer(myId, {
+  debug: 2
+});
+
+let localStream;
+const status = document.getElementById('status');
+
+// 3. Get Local Media
+navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+  .then(stream => {
+    localStream = stream;
+    document.getElementById('local').srcObject = stream;
+    status.innerText = "Camera ready. Share your ID to start.";
+  })
+  .catch(err => {
+    status.innerText = "Error: " + err.message;
+  });
+
+// 4. Handle Incoming Calls
+peer.on('call', (call) => {
+  status.innerText = "Inbound call...";
+  call.answer(localStream); // Answer with your stream
+  call.on('stream', (remoteStream) => {
+    document.getElementById('remote').srcObject = remoteStream;
+    status.innerText = "Connected!";
+  });
+});
+
+// 5. Start a Call (The Caller)
+function startCall() {
+  const targetId = document.getElementById('remote-id').value;
+  if (!targetId) return alert("Enter a code first!");
+
+  status.innerText = "Connecting to " + targetId + "...";
+  const call = peer.call(targetId, localStream);
+  
+  call.on('stream', (remoteStream) => {
+    document.getElementById('remote').srcObject = remoteStream;
+    status.innerText = "Connected!";
+  });
+
+  call.on('error', (err) => {
+    status.innerText = "Call failed: " + err;
+  });
+}
+
+peer.on('open', (id) => {
+  console.log('My peer ID is: ' + id);
+});
+</script>
+
+</body>
+</html>
