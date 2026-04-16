@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pro Group P2P Call</title>
+  <title>Pro Group P2P Call with Private Chat</title>
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <style>
     body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:#111; color:#eee; margin:0; display: flex; height: 100vh; overflow: hidden; }
@@ -20,7 +20,6 @@
     .name-tag { position: absolute; bottom: 15px; left: 15px; background: rgba(0,0,0,0.8); padding: 5px 12px; border-radius: 6px; font-size: 14px; font-weight: bold; color: #fff; z-index: 20; border: 1px solid rgba(255,255,255,0.2); }
     .video-controls { position: absolute; top: 10px; right: 10px; z-index: 20; display: flex; gap: 5px; }
     
-    /* Buttons */
     .icon-btn { background: rgba(0,0,0,0.6); border: 1px solid #444; color: white; padding: 8px; border-radius: 50%; cursor: pointer; width: 35px; height: 35px; display: flex; align-items: center; justify-content: center; font-size: 18px; transition: 0.2s; }
     .icon-btn.off { background: #dc3545; border-color: #dc3545; }
     
@@ -29,13 +28,17 @@
     #chat-box { flex: 1; padding: 15px; overflow-y: auto; scroll-behavior: smooth; }
     .msg { margin-bottom: 12px; padding: 10px; border-radius: 8px; background: #2a2a2a; border-left: 4px solid #007bff; font-size: 14px; }
     .msg b { color: #00d4ff; display: block; margin-bottom: 2px; }
+    
+    /* Private Message Style */
+    .msg.private { border-left-color: #ff00ff; background: #2d1a2d; }
+    .msg.private b { color: #ff00ff; }
+
     .input-area { padding: 15px; background: #111; display: flex; gap: 8px; border-top: 1px solid #333; }
     
     /* Header Controls */
     .controls { background: #222; padding: 15px; border-radius: 12px; margin-bottom: 15px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; border: 1px solid #333; }
     input { padding: 10px; border-radius: 6px; border: 1px solid #444; background: #000; color: #fff; outline: none; flex: 1; min-width: 120px; }
     .btn-main { padding: 10px 20px; cursor: pointer; border-radius: 6px; border: none; background: #007bff; color: white; font-weight: bold; transition: 0.2s; }
-    .btn-main:hover { background: #0056b3; }
   </style>
 </head>
 <body>
@@ -53,7 +56,7 @@
 <div class="sidebar">
   <div id="chat-box"></div>
   <div class="input-area">
-    <input type="text" id="chat-input" placeholder="Type message..." style="flex:1">
+    <input type="text" id="chat-input" placeholder="Message (use @name for private)..." style="flex:1">
     <button class="btn-main" onclick="sendMsg()">Send</button>
   </div>
 </div>
@@ -68,16 +71,13 @@ let localStream = null;
 let peer;
 let connections = {}; 
 
-// Initialize Peer ID immediately
 initPeer();
 
-// Try to get camera, but continue if it fails
 async function startMedia() {
   try {
     localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
     addVideoStream(localStream, "You (Local)", true, "local-user");
   } catch (err) {
-    console.warn("No camera/mic found.");
     const canvas = document.createElement('canvas');
     canvas.width = 640; canvas.height = 480;
     const ctx = canvas.getContext('2d');
@@ -108,43 +108,31 @@ function handleJoinClick() {
 
 function connectToPeer(targetId) {
   if (!targetId || targetId === peer.id || connections[targetId]) return;
-
-  // Video call
   peer.call(targetId, localStream).on('stream', s => addVideoStream(s, "Loading...", false, targetId));
-  
-  // Data connection
   setupChatConnection(peer.connect(targetId), false);
 }
 
 function setupChatConnection(conn, isIncoming) {
   conn.on('open', () => {
     connections[conn.peer] = { conn, name: "User " + conn.peer };
-
-    // Exchange Name
     conn.send({ type: 'name-update', name: nameInput.value || "User " + peer.id });
 
-    // MESH LOGIC: If someone joins US, introduce them to everyone else we know
     if (isIncoming) {
       const knownPeers = Object.keys(connections).filter(id => id !== conn.peer);
-      if (knownPeers.length > 0) {
-        conn.send({ type: 'mesh-intro', peerIds: knownPeers });
-      }
+      if (knownPeers.length > 0) conn.send({ type: 'mesh-intro', peerIds: knownPeers });
     }
 
     conn.on('data', data => {
-      // Update Name Label
       if (data.type === 'name-update') {
         connections[conn.peer].name = data.name;
         const tag = document.querySelector(`[data-id="${conn.peer}"] .name-tag`);
         if (tag) tag.innerText = data.name;
       }
       
-      // Receive Chat
       if (data.type === 'chat') {
-        appendMessage(connections[conn.peer].name, data.message);
+        appendMessage(connections[conn.peer].name, data.message, data.isPrivate);
       }
 
-      // Handle Introduction (Connect to the rest of the group)
       if (data.type === 'mesh-intro') {
         data.peerIds.forEach(id => connectToPeer(id));
       }
@@ -157,6 +145,55 @@ function setupChatConnection(conn, isIncoming) {
   });
 }
 
+function sendMsg() {
+  const text = chatInput.value.trim();
+  if (!text) return;
+
+  let targetPeer = null;
+  let cleanText = text;
+  let isPrivate = false;
+
+  // Private message logic: check if it starts with @
+  if (text.startsWith('@')) {
+    const spaceIndex = text.indexOf(' ');
+    if (spaceIndex !== -1) {
+      const targetName = text.substring(1, spaceIndex).toLowerCase();
+      cleanText = text.substring(spaceIndex + 1);
+      
+      // Look for a peer with matching name or matching ID
+      targetPeer = Object.values(connections).find(c => 
+        c.name.toLowerCase() === targetName || c.conn.peer === targetName
+      );
+      
+      if (targetPeer) {
+        isPrivate = true;
+      } else {
+        appendMessage("System", "User not found for private message.", true);
+        return;
+      }
+    }
+  }
+
+  if (isPrivate && targetPeer) {
+    targetPeer.conn.send({ type: 'chat', message: cleanText, isPrivate: true });
+    appendMessage(`You [Private to ${targetPeer.name}]`, cleanText, true);
+  } else {
+    Object.values(connections).forEach(c => c.conn.send({ type: 'chat', message: text, isPrivate: false }));
+    appendMessage("You", text, false);
+  }
+
+  chatInput.value = "";
+}
+
+function appendMessage(sender, text, isPrivate) {
+  const div = document.createElement('div');
+  div.className = isPrivate ? 'msg private' : 'msg';
+  div.innerHTML = `<b>${sender}</b> ${text}`;
+  chatBox.appendChild(div);
+  chatBox.scrollTop = chatBox.scrollHeight;
+}
+
+// Controls
 function toggleMute(btn) {
   if (!localStream) return;
   const track = localStream.getAudioTracks()[0];
@@ -179,16 +216,13 @@ function toggleVideo(btn) {
 
 function addVideoStream(stream, displayName, isLocal, id) {
   if (document.querySelector(`[data-id="${id}"]`)) return;
-
   const container = document.createElement('div');
   container.className = 'video-container';
   container.setAttribute('data-id', id);
-
   const video = document.createElement('video');
   video.srcObject = stream;
   video.playsInline = true;
   video.addEventListener('loadedmetadata', () => video.play());
-
   const nameTag = document.createElement('div');
   nameTag.className = 'name-tag';
   nameTag.innerText = isLocal ? (nameInput.value || "You (Local)") : displayName;
@@ -200,34 +234,13 @@ function addVideoStream(stream, displayName, isLocal, id) {
         c.conn.send({ type: 'name-update', name: nameInput.value || "User " + peer.id });
       });
     });
-
     const controls = document.createElement('div');
     controls.className = 'video-controls';
-    controls.innerHTML = `
-      <button class="icon-btn" onclick="toggleMute(this)">🎤</button>
-      <button class="icon-btn" onclick="toggleVideo(this)">📷</button>
-    `;
+    controls.innerHTML = `<button class="icon-btn" onclick="toggleMute(this)">🎤</button><button class="icon-btn" onclick="toggleVideo(this)">📷</button>`;
     container.appendChild(controls);
   }
-
   container.append(video, nameTag);
   videoGrid.append(container);
-}
-
-function sendMsg() {
-  const text = chatInput.value;
-  if (!text) return;
-  Object.values(connections).forEach(c => c.conn.send({ type: 'chat', message: text }));
-  appendMessage("You", text);
-  chatInput.value = "";
-}
-
-function appendMessage(sender, text) {
-  const div = document.createElement('div');
-  div.className = 'msg';
-  div.innerHTML = `<b>${sender}</b> ${text}`;
-  chatBox.appendChild(div);
-  chatBox.scrollTop = chatBox.scrollHeight;
 }
 
 chatInput.addEventListener("keypress", (e) => { if (e.key === "Enter") sendMsg(); });
