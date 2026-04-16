@@ -1,91 +1,141 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Group P2P Video Call</title>
+  <title>Group Video & Chat</title>
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <style>
-    body { font-family: sans-serif; text-align: center; background:#1a1a1a; color:#eee; margin:0; padding:20px; }
-    #video-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 10px; padding: 20px; }
-    video { width: 100%; background: #000; border-radius: 10px; transform: scaleX(-1); } /* Mirror local */
-    .controls { background: #333; padding: 20px; border-radius: 15px; display: inline-block; margin-bottom: 20px; }
-    input { padding: 10px; border-radius: 5px; border: none; width: 150px; }
-    button { padding: 10px 20px; cursor: pointer; border-radius: 5px; border: none; background: #28a745; color: white; font-weight: bold; }
-    #status { color: #00ff00; font-family: monospace; margin-top: 10px; }
+    body { font-family: sans-serif; background:#1a1a1a; color:#eee; margin:0; display: flex; height: 100vh; overflow: hidden; }
+    
+    /* Layout */
+    .main-container { flex: 1; display: flex; flex-direction: column; padding: 20px; }
+    #video-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 10px; flex-grow: 1; overflow-y: auto; }
+    video { width: 100%; background: #000; border-radius: 10px; transform: scaleX(-1); border: 1px solid #444; }
+
+    /* Sidebar Chat */
+    .sidebar { width: 300px; background: #252525; border-left: 1px solid #444; display: flex; flex-direction: column; }
+    #chat-box { flex: 1; padding: 15px; overflow-y: auto; font-size: 14px; }
+    .msg { margin-bottom: 10px; padding: 8px; border-radius: 5px; background: #333; word-wrap: break-word; }
+    .msg b { color: #007bff; }
+    .input-area { padding: 15px; background: #1a1a1a; display: flex; gap: 5px; }
+    
+    /* Controls */
+    .controls { background: #333; padding: 15px; border-radius: 10px; margin-bottom: 15px; }
+    input { padding: 8px; border-radius: 4px; border: 1px solid #555; background: #222; color: #fff; }
+    button { padding: 8px 15px; cursor: pointer; border-radius: 4px; border: none; background: #28a745; color: white; font-weight: bold; }
+    #status { font-size: 12px; color: #888; margin-top: 5px; }
   </style>
 </head>
 <body>
 
-<h2>Group Video Call</h2>
+<div class="main-container">
+  <div class="controls">
+    <strong>Your ID:</strong> <span id="my-id">...</span>
+    <input type="text" id="join-id" placeholder="Enter Friend's ID">
+    <button onclick="connectToPeer()">Connect</button>
+    <div id="status">Waiting for camera...</div>
+  </div>
 
-<div class="controls">
-  <div><strong>Your ID:</strong> <span id="my-id">...</span></div>
-  <br>
-  <input type="text" id="join-id" placeholder="Enter 6-digit ID">
-  <button onclick="connectToPeer()">Join Person</button>
+  <div id="video-grid"></div>
 </div>
 
-<div id="status">Initializing...</div>
-
-<div id="video-grid">
+<div class="sidebar">
+  <div id="chat-box"></div>
+  <div class="input-area">
+    <input type="text" id="chat-input" placeholder="Type a message..." style="flex:1">
+    <button onclick="sendMsg()">Send</button>
   </div>
+</div>
 
 <script>
 const videoGrid = document.getElementById('video-grid');
+const chatBox = document.getElementById('chat-box');
+const chatInput = document.getElementById('chat-input');
 const status = document.getElementById('status');
+
 let localStream;
-const peers = {};
+let peer;
+let connections = {}; // Keep track of data connections for texting
 
-// 1. Setup Local Video
-const localVideo = document.createElement('video');
-localVideo.muted = true;
-
+// 1. Get Camera
 navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then(stream => {
   localStream = stream;
-  addVideoStream(localVideo, stream);
-  status.innerText = "Camera Active. Share your ID.";
+  addVideoStream(document.createElement('video'), stream, true);
   initPeer();
-});
+}).catch(err => status.innerText = "Camera error: " + err.message);
 
 function initPeer() {
-  // Generate random 6-digit ID
   const myId = Math.floor(100000 + Math.random() * 900000).toString();
   document.getElementById('my-id').innerText = myId;
+  peer = new Peer(myId);
 
-  const peer = new Peer(myId);
-
-  // 2. Handle incoming calls
+  // Handle incoming VIDEO calls
   peer.on('call', call => {
     call.answer(localStream);
     const video = document.createElement('video');
-    call.on('stream', userVideoStream => {
-      addVideoStream(video, userVideoStream);
-    });
+    call.on('stream', userStream => addVideoStream(video, userStream));
   });
 
-  // 3. Connection Logic
-  window.connectToPeer = function() {
-    const targetId = document.getElementById('join-id').value;
-    if (!targetId || targetId === myId) return;
+  // Handle incoming TEXT connections
+  peer.on('connection', conn => {
+    setupChatConnection(conn);
+  });
 
-    status.innerText = "Connecting to " + targetId + "...";
-    const call = peer.call(targetId, localStream);
-    const video = document.createElement('video');
-
-    call.on('stream', userVideoStream => {
-      addVideoStream(video, userVideoStream);
-    });
-    
-    call.on('close', () => video.remove());
-  };
-
-  peer.on('open', id => console.log('My ID:', id));
+  peer.on('open', () => status.innerText = "Online & Ready");
 }
 
-function addVideoStream(video, stream) {
+function connectToPeer() {
+  const targetId = document.getElementById('join-id').value;
+  if (!targetId || targetId === peer.id) return;
+
+  // Start Video Call
+  const call = peer.call(targetId, localStream);
+  const video = document.createElement('video');
+  call.on('stream', userStream => addVideoStream(video, userStream));
+
+  // Start Text Connection
+  const conn = peer.connect(targetId);
+  setupChatConnection(conn);
+}
+
+function setupChatConnection(conn) {
+  connections[conn.peer] = conn;
+  conn.on('data', data => {
+    appendMessage(conn.peer, data);
+  });
+  conn.on('close', () => delete connections[conn.peer]);
+}
+
+function sendMsg() {
+  const text = chatInput.value;
+  if (!text) return;
+
+  // Send to everyone connected
+  Object.values(connections).forEach(conn => conn.send(text));
+  
+  appendMessage("You", text);
+  chatInput.value = "";
+}
+
+function appendMessage(sender, text) {
+  const div = document.createElement('div');
+  div.classList.add('msg');
+  div.innerHTML = `<b>${sender}:</b> ${text}`;
+  chatBox.appendChild(div);
+  chatBox.scrollTop = chatBox.scrollHeight;
+}
+
+function addVideoStream(video, stream, isLocal = false) {
   video.srcObject = stream;
+  if (isLocal) video.muted = true;
   video.addEventListener('loadedmetadata', () => video.play());
   videoGrid.append(video);
 }
+
+// Allow "Enter" key to send message
+chatInput.addEventListener("keypress", (e) => {
+  if (e.key === "Enter") sendMsg();
+});
 </script>
+
 </body>
 </html>
