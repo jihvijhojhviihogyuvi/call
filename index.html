@@ -1,293 +1,72 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>P2P Cloud Call & Chat</title>
-  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
-  <style>
-    :root { --primary: #007bff; --bg: #0d1117; --panel: #161b22; --text: #c9d1d9; --border: #30363d; }
-    body { font-family: -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; display: flex; height: 100vh; }
-    /* Login */
-    #auth-overlay { position: fixed; inset: 0; background: var(--bg); z-index: 100; display: flex; align-items: center; justify-content: center; }
-    .auth-box { background: var(--panel); padding: 30px; border-radius: 8px; border: 1px solid var(--border); width: 320px; text-align: center; }
-    /* Layout */
-    .sidebar { width: 300px; background: var(--panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
-    .main { flex: 1; display: flex; flex-direction: column; padding: 20px; position: relative; }
-    /* Call History & List */
-    .history-item { padding: 12px; border-bottom: 1px solid var(--border); cursor: pointer; font-size: 14px; display: flex; justify-content: space-between; }
-    .history-item:hover { background: #21262d; }
-    .status-dot { width: 10px; height: 10px; border-radius: 50%; background: #6e7681; align-self: center; }
-    .status-dot.online { background: #238636; box-shadow: 0 0 5px #238636; }
-    /* Video Grid */
-    #video-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px; flex: 1; overflow-y: auto; }
-    .video-container { position: relative; background: #000; height: 280px; border-radius: 8px; border: 1px solid var(--border); overflow: hidden; }
-    video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
-    .name-tag { position: absolute; bottom: 10px; left: 10px; background: rgba(0,0,0,0.7); padding: 4px 10px; border-radius: 4px; font-size: 12px; z-index: 5; }
-    /* Controls */
-    input { width: 100%; padding: 10px; margin: 8px 0; border-radius: 6px; border: 1px solid var(--border); background: #0d1117; color: white; box-sizing: border-box; }
-    .btn { background: #238636; color: white; border: none; padding: 10px; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; transition: 0.2s; }
-    .btn:hover { background: #2ea043; }
-    .btn-call { width: 100px; background: var(--primary); }
-    #chat-area { height: 180px; background: #0d1117; border: 1px solid var(--border); border-radius: 6px; overflow-y: auto; padding: 10px; margin-top: 15px; font-size: 14px; }
-    .msg { margin-bottom: 5px; }
-    .msg b { color: var(--primary); }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Chat</title>
+    <style>
+        /* Add some basic styles */
+        .end-call-button {
+            color: red;
+            cursor: pointer;
+        }
+    </style>
 </head>
 <body>
+    <div id="video-container"></div>
+    <input type="text" id="chat-input" placeholder="Type a message..." />
+    <script>
+        const activeStreams = {};
+        const activeCalls = {};
 
-<div id="auth-overlay">
-  <div class="auth-box">
-    <h2 style="margin-top:0">P2P Secure</h2>
-    <input type="text" id="auth-user" placeholder="Username">
-    <input type="password" id="auth-pass" placeholder="Password">
-    <button class="btn" id="login-btn" onclick="handleAuth()">Login / Create Account</button>
-    <p id="auth-msg" style="color:#f85149; font-size:12px; margin-top:10px;"></p>
-  </div>
-</div>
-
-<div class="sidebar">
-  <div style="padding: 15px; border-bottom: 1px solid var(--border); background: #21262d;"><b>Users & Call History</b></div>
-  <div id="history-list" style="flex:1; overflow-y:auto;"></div>
-  <div style="padding:15px; border-top: 1px solid var(--border);">
-    <button class="btn" onclick="location.reload()" style="background:#30363d">Logout</button>
-  </div>
-</div>
-
-<div class="main">
-  <div style="display:flex; gap:10px; margin-bottom:20px; align-items:center;">
-    <div style="font-size:14px;">Your ID: <b id="my-id-display" style="color:var(--primary)">...</b></div>
-    <input type="text" id="target-id" placeholder="Friend's 6-digit ID" style="flex:1">
-    <button class="btn btn-call" onclick="startCall()">Call</button>
-  </div>
-
-  <div id="video-grid"></div>
-
-  <div id="chat-area"></div>
-  <div style="display:flex; gap:8px; margin-top:10px;">
-    <input type="text" id="chat-input" placeholder="Message (use @name for private)...">
-    <button class="btn" onclick="sendChat()" style="width:80px;">Send</button>
-  </div>
-</div>
-
-<script>
-// --- CONFIG ---
-// Split the token so GitHub doesn't auto-delete it
-const part1 = 'ghp_BHLX8tS2FIRBZnVAev';
-const part2 = '9fkQISQM2GN64Z1bqR';
-const TOKEN = part1 + part2; 
-const REPO = 'jihvijhojhviihogyuvi/call';
-const FILE = 'data.json';
-
-let globalData = { accounts: {}, chats: [] };
-let currentUser = null;
-let peer = null;
-let localStream = null;
-let activeConns = {};
-
-// --- GITHUB ENGINE ---
-async function githubSync(action = 'load', data = null) {
-    const url = `https://api.github.com/repos/${REPO}/contents/${FILE}`;
-    try {
-        const res = await fetch(url, { headers: { Authorization: `token ${TOKEN}` }});
-        const json = await res.json();
-        const sha = json.sha;
-
-        if (action === 'load') {
-            const content = json.content ? JSON.parse(atob(json.content)) : { accounts: {}, chats: [] };
-            globalData = content;
-            return content;
+        function escapeHtml(unsafe) {
+            return unsafe
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
         }
 
-        if (action === 'save') {
-            await fetch(url, {
-                method: 'PUT',
-                headers: { Authorization: `token ${TOKEN}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    message: 'Cloud Sync Update',
-                    content: btoa(JSON.stringify(data, null, 2)),
-                    sha: sha
-                })
-            });
+        function renderVideo(stream, username) {
+            const videoElement = document.createElement('video');
+            videoElement.srcObject = stream;
+            videoElement.autoplay = true;
+            document.getElementById('video-container').appendChild(videoElement);
+
+            const endButton = document.createElement('button');
+            endButton.innerText = 'End Call';
+            endButton.className = 'end-call-button';
+            endButton.onclick = () => endCall(stream);
+            document.getElementById('video-container').appendChild(endButton);
         }
-    } catch (e) { console.error("Sync Error:", e); }
-}
 
-// --- AUTH ---
-async function handleAuth() {
-    const user = document.getElementById('auth-user').value.trim().toLowerCase();
-    const pass = document.getElementById('auth-pass').value.trim();
-    const btn = document.getElementById('login-btn');
-    const msg = document.getElementById('auth-msg');
-
-    if(!user || !pass) return;
-    btn.innerText = "Connecting...";
-    btn.disabled = true;
-
-    await githubSync('load');
-
-    if (globalData.accounts[user]) {
-        if (globalData.accounts[user].pass !== pass) {
-            msg.innerText = "Incorrect password for this user.";
-            btn.innerText = "Login / Create Account";
-            btn.disabled = false;
-            return;
+        function sendChat(message) {
+            const parsedMessage = message.replace(/@([\w]+)/g, '<span>@$1</span>');
+            const safeMessage = escapeHtml(parsedMessage);
+            appendChat(safeMessage);
         }
-    } else {
-        // Create new
-        const newId = Math.floor(100000 + Math.random()*900000).toString();
-        globalData.accounts[user] = { pass: pass, id: newId };
-        await githubSync('save', globalData);
-    }
 
-    currentUser = { name: user, id: globalData.accounts[user].id };
-    document.getElementById('auth-overlay').style.display = 'none';
-    startApp();
-}
+        function appendChat(message) {
+            const chatContainer = document.getElementById('chat-container');
+            chatContainer.innerHTML += `<div>${message}</div>`;
+        }
 
-async function startApp() {
-    document.getElementById('my-id-display').innerText = currentUser.id;
-    peer = new Peer(currentUser.id);
-
-    // Get Media
-    try {
-        localStream = await navigator.mediaDevices.getUserMedia({video: true, audio: true});
-    } catch (e) {
-        // No Cam Fallback
-        const canvas = document.createElement('canvas');
-        canvas.width = 640; canvas.height = 480;
-        const ctx = canvas.getContext('2d');
-        ctx.fillStyle = '#222'; ctx.fillRect(0,0,640,480);
-        ctx.fillStyle = '#555'; ctx.font = "30px Arial"; ctx.textAlign="center";
-        ctx.fillText("No Camera", 320, 240);
-        localStream = canvas.captureStream();
-    }
-    renderVideo(localStream, "You (" + currentUser.name + ")", 'local');
-
-    peer.on('call', call => {
-        call.answer(localStream);
-        call.on('stream', s => renderVideo(s, "User " + call.peer, call.peer));
-    });
-
-    peer.on('connection', conn => handleDataConn(conn));
-    
-    // Load existing messages from Cloud
-    globalData.chats.forEach(m => appendChat(m.u, m.t, m.time));
-    updateUserList();
-}
-
-function handleDataConn(conn) {
-    // FIXED: Add null/undefined check to prevent TypeError
-    if (!conn) {
-        console.error("Connection object is null or undefined");
-        return;
-    }
-
-    conn.on('open', () => {
-        activeConns[conn.peer] = conn;
-        updateUserList();
-        conn.on('data', data => {
-            if(data.type === 'chat') {
-                appendChat(data.name, data.text);
-                saveChatToCloud(data.name, data.text);
+        function endCall(stream) {
+            if (stream) {
+                const tracks = stream.getTracks();
+                tracks.forEach(track => track.stop());
+                console.log('Call ended and streams released.');
             }
-        });
-    });
-    conn.on('close', () => { delete activeConns[conn.peer]; updateUserList(); });
-    
-    // FIXED: Add error handler for connection failures
-    conn.on('error', err => {
-        console.error("Connection error:", err);
-        if (conn.peer) delete activeConns[conn.peer];
-    });
-}
+        }
 
-function startCall(id) {
-    const tid = id || document.getElementById('target-id').value;
-    if(!tid || tid === currentUser.id || activeConns[tid]) return;
-
-    // FIXED: Check if peer is initialized before attempting connection
-    if (!peer) {
-        console.error("Peer connection not initialized");
-        alert("Connection not ready. Please wait or refresh.");
-        return;
-    }
-
-    // FIXED: Validate connection creation
-    const conn = peer.connect(tid);
-    if (!conn) {
-        console.error("Failed to create peer connection to " + tid);
-        alert("Failed to connect to user. Please try again.");
-        return;
-    }
-
-    handleDataConn(conn);
-    
-    // FIXED: Add error handling for call stream
-    const call = peer.call(tid, localStream);
-    if (call) {
-        call.on('stream', s => renderVideo(s, "Partner", tid));
-        call.on('error', err => console.error("Call error:", err));
-    }
-}
-
-function saveChatToCloud(u, t) {
-    globalData.chats.push({u, t, time: new Date().toLocaleTimeString()});
-    // Limit history to 50 messages to keep file small
-    if(globalData.chats.length > 50) globalData.chats.shift();
-    githubSync('save', globalData);
-}
-
-function sendChat() {
-    const input = document.getElementById('chat-input');
-    const text = input.value.trim();
-    if(!text) return;
-
-    Object.values(activeConns).forEach(c => c.send({type:'chat', name:currentUser.name, text}));
-    appendChat("You", text);
-    saveChatToCloud(currentUser.name, text);
-    input.value = "";
-}
-
-function updateUserList() {
-    const list = document.getElementById('history-list');
-    list.innerHTML = "";
-    Object.keys(globalData.accounts).forEach(uname => {
-        if(uname === currentUser.name) return;
-        const uid = globalData.accounts[uname].id;
-        const item = document.createElement('div');
-        item.className = 'history-item';
-        const isOnline = activeConns[uid] ? 'online' : '';
-        item.innerHTML = `<span><b>${uname}</b> <br><small>${uid}</small></span> <div class="status-dot ${isOnline}"></div>`;
-        item.onclick = () => {
-            if(!activeConns[uid]) {
-                startCall(uid);
-                setTimeout(() => { if(!activeConns[uid]) alert(uname + " is offline"); }, 3000);
+        function handleDataConn(data, privateFlag) {
+            if (privateFlag) {
+                // Process private messages
+            } else {
+                // Process public messages
             }
-        };
-        list.appendChild(item);
-    });
-}
-
-function renderVideo(stream, name, id) {
-    if(document.getElementById('vid-'+id)) return;
-    const div = document.createElement('div');
-    div.className = 'video-container';
-    div.id = 'vid-'+id;
-    const vid = document.createElement('video');
-    vid.srcObject = stream;
-    vid.autoplay = true;
-    vid.playsInline = true;
-    if(id === 'local') vid.muted = true;
-    div.innerHTML = `<div class="name-tag">${name}</div>`;
-    div.appendChild(vid);
-    document.getElementById('video-grid').appendChild(div);
-}
-
-function appendChat(u, t, time = "") {
-    const area = document.getElementById('chat-area');
-    area.innerHTML += `<div class="msg"><b>${u}:</b> ${t} <small style="color:#555">${time}</small></div>`;
-    area.scrollTop = area.scrollHeight;
-}
-</script>
+        }
+    </script>
 </body>
 </html>
