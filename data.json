@@ -46,6 +46,12 @@
       "t": "hi",
       "time": "7:40:42 PM",
       "private": true
+    },
+    {
+      "u": "chars",
+      "t": "hi",
+      "time": "7:40:46 PM",
+      "private": false
     }
   ],
   "test_logs": [
