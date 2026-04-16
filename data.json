@@ -40,6 +40,12 @@
       "t": "@char hi",
       "time": "7:40:18 PM",
       "private": true
+    },
+    {
+      "u": "chars",
+      "t": "hi",
+      "time": "7:40:42 PM",
+      "private": true
     }
   ],
   "test_logs": [
